@@ -2,55 +2,61 @@
 
 ## How to Run
 
-1. Compile
+1. Install Dependencies 
 
 ```
-gcc -Wall -Wextra -lpcap sniffer.c -o sniffer
+sudo apt-get install libpcap-dev
 ```
 
-2. Build Docker Image
+2. Compile
+
+```
+g++ -Wall -Wextra sniffer.cpp syn_attack.cpp -o sniffer -lpcap -lpthread
+```
+
+3. Build Docker Image
 
 ```
 docker build -t sniffer:0.1.0 .
 ```
 
-3. Create Docker Network
+4. Create Docker Network
 
 ```
 docker network create sniffer
 ```
 
-4. Run
+5. Run
 
 ```
 docker run -d --name sniffer --network sniffer sniffer:0.1.0
 ```
 
-5. Attack
+6. Attack
 
 ```
 docker run -it --rm --network sniffer busybox:1.34.1-musl ping sniffer
 ```
 
-6. Watch Logs
+7. Watch Logs
 
 ```
 docker logs sniffer
 ```
 
-7. Stop
+8. Stop
 
 ```
 docker stop -t 0 sniffer
 ```
 
-8. Remove Container
+9. Remove Container
 
 ```
 docker rm -f sniffer
 ```
 
-9. Rinse and Repeat :)
+10. Rinse and Repeat :)
 
 ## Bugs
 
