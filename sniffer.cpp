@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <getopt.h>
@@ -13,19 +14,25 @@
 #include <pcap.h>
 #include <signal.h>
 #include <string>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "syn_attack.h"
+
 using namespace std;
+using namespace chrono;
 
 const int THRESHOLD = 10;// requests
 const int PERIOD = 5;    // seconds
 
-chrono::steady_clock::time_point initial_time;
+steady_clock::time_point initial_time;
 
 
 deque<pair<int, string>> dq;
 map<string, int> passed;
+
+bpf_u_int32 ip, subnet_mask;
 
 // timestamp in seconds
 bool is_within_limit(string src_ip, int timestamp) {
@@ -38,7 +45,7 @@ bool is_within_limit(string src_ip, int timestamp) {
     }
     dq.emplace_back(timestamp, src_ip);
     passed[src_ip]++;
-    return true
+    return true;
 }
 
 void packet_handler(u_char *arg,
@@ -57,11 +64,15 @@ void packet_handler(u_char *arg,
     ip_hdr = (struct ip *) packet;
     strcpy(src_ip, inet_ntoa(ip_hdr->ip_src));
     strcpy(dst_ip, inet_ntoa(ip_hdr->ip_dst));
+
+    bool is_sent = (ip_hdr->ip_src.s_addr & subnet_mask) == ip;
+
     sprintf(ip_hdr_info, "ID:%d TOS:0x%x, TTL:%d IpHdrLen:%d DatagramLen:%d",
             ntohs(ip_hdr->ip_id), ip_hdr->ip_tos, ip_hdr->ip_ttl,
             4 * ip_hdr->ip_hl, ntohs(ip_hdr->ip_len));
 
     packet += 4 * ip_hdr->ip_hl;
+    
     switch (ip_hdr->ip_p) {
         case IPPROTO_TCP:
             tcp_hdr = (struct tcphdr *) packet;
@@ -74,8 +85,11 @@ void packet_handler(u_char *arg,
                    (tcp_hdr->th_flags & TH_PUSH ? 'P' : '*'),
                    (tcp_hdr->th_flags & TH_RST ? 'R' : '*'),
                    (tcp_hdr->th_flags & TH_SYN ? 'S' : '*'),
-                   (tcp_hdr->th_flags & TH_SYN ? 'F' : '*'), ntohl(tcp_hdr->th_seq),
+                   (tcp_hdr->th_flags & TH_FIN ? 'F' : '*'), ntohl(tcp_hdr->th_seq),
                    ntohl(tcp_hdr->th_ack), ntohs(tcp_hdr->th_win), 4 * tcp_hdr->th_off);
+            if(is_syn_attck(src_ip, dst_ip, is_sent, tcp_hdr)){
+                // Block the destination ip
+            }
             break;
 
         case IPPROTO_UDP:
@@ -88,7 +102,7 @@ void packet_handler(u_char *arg,
         case IPPROTO_ICMP:
             icmp_hdr = (struct icmp *) packet;
             auto temp_stop = steady_clock::now();
-            int current_second = duration_cast<seconds>(temp_stop - initial_time);// relative to initial time;
+            int current_second = duration_cast<seconds>(temp_stop - initial_time).count();// relative to initial time;
 
             if (is_within_limit(string(src_ip), current_second)) {
                 // request can pass
@@ -110,7 +124,6 @@ int main(int argc, char **argv) {
     initial_time = steady_clock::now();
     char *dev = "", error_buffer[PCAP_ERRBUF_SIZE];
     pcap_if_t *devs = NULL;
-    bpf_u_int32 ip, subnet_mask;
     pcap_t *fd;
     struct bpf_program filter;
     char filter_expression[256] = "";
