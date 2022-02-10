@@ -114,7 +114,7 @@ void packet_handler(u_char *arg,
            ntohl(tcp_hdr->th_ack), ntohs(tcp_hdr->th_win), 4 * tcp_hdr->th_off);
 
     if (is_syn_attck(src_ip, dst_ip, is_sent, tcp_hdr))
-      block_ip(src_ip);
+      block_ip(dst_ip);
 
     break;
 
